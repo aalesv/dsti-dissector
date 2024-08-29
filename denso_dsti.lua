@@ -272,8 +272,8 @@ end
 
 function get_return_code_description(code)
 	local des = ""
-	if (code == 0) then return " (OK)"
-	end
+	if (code == 0) then des = " (OK)" end
+	return des
 end
 
 DissectorTable.get("usb.bulk"):add(0xffff, densodsti_protocol)
