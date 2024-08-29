@@ -1,8 +1,9 @@
 local ID_PASSTHRU = 0x0210
 
 local OPCODE_CONNECT	= 0x00
-local OPCODE_IOCTL	= 0x0B
+local OPCODE_DISCONNECT	= 0x01
 local OPCODE_SET_FILTER	= 0x06
+local OPCODE_IOCTL		= 0x0B
 
 --- J2534 protocols
 local J1850VPW =	0x01
@@ -57,8 +58,9 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   local opcode = buffer(5,1):uint()
   local opcode_text = ""
   if (opcode == OPCODE_CONNECT) then opcode_text = " (CONNECT)" end
-  if (opcode == OPCODE_IOCTL) then opcode_text = " (IOCTL)" end
+  if (opcode == OPCODE_DISCONNECT) then opcode_text = " (DISCONNECT)" end
   if (opcode == OPCODE_SET_FILTER) then opcode_text = " (SET_FILTER)" end
+  if (opcode == OPCODE_IOCTL) then opcode_text = " (IOCTL)" end
   
   local data_len = buffer(2,1):uint()
 
@@ -78,6 +80,13 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   then
 	if     (addr == 0x007f)	then connect_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
 	elseif (addr == 0x00ff) then connect_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
+	else
+		payloadSubtree:add(data, dataBuf)
+	end
+  elseif (pid == ID_PASSTHRU and opcode == OPCODE_DISCONNECT)
+  then
+	if     (addr == 0x007f)	then disconnect_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
+	elseif (addr == 0x00ff) then disconnect_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
 	else
 		payloadSubtree:add(data, dataBuf)
 	end
@@ -140,8 +149,39 @@ function connect_protocol_dissector_resp(buffer, pinfo, tree)
 	pinfo.cols.protocol = "DENSODSTI.CONNECT_RESP"
 	local subtree = tree:add(data, buffer())
 	subtree:add_le(connect_unk, buffer(0,1))
-	subtree:add_le(connect_returnCode, buffer(1,4))
+	local r = buffer(1,4):le_uint()
+	subtree:add_le(connect_returnCode, buffer(1,4)):append_text(get_return_code_description(r))
 	subtree:add_le(connect_channelID, buffer(5,4))
+end
+
+--- DISCONNECT dissector
+
+disconnect_protocol = Proto("DensoDstiDisonnect", "Denso DST-i DISCONNECT")
+disconnect_unk = ProtoField.uint8("DensoDSTi.disconnect.unk", "unk", base.HEX)
+disconnect_returnCode = ProtoField.uint32("DensoDSTi.disconnect.returnCode", "returnCode", base.HEX)
+disconnect_channelID = ProtoField.uint32("DensoDSTi.disconnect.channelID", "channelID", base.HEX)
+
+disconnect_protocol.fields = {disconnect_unk, disconnect_returnCode, disconnect_channelID}
+
+function disconnect_protocol_dissector_req(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+
+	pinfo.cols.protocol = "DENSODSTI.DISCONNECT_REQ"
+	
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(disconnect_channelID, buffer(0,4))
+end
+
+function disconnect_protocol_dissector_resp(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+
+	pinfo.cols.protocol = "DENSODSTI.DISCONNECT_RESP"
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(connect_unk, buffer(0,1))
+	local r = buffer(1,4):le_uint()
+	subtree:add_le(connect_returnCode, buffer(1,4)):append_text(get_return_code_description(r))
 end
 
 --- IOCTL dissector
@@ -211,7 +251,8 @@ function ioctl_protocol_dissector_resp(buffer, pinfo, tree)
 
 	local subtree = tree:add(data, buffer())
 	subtree:add_le(ioctl_unk, buffer(0,1))
-	subtree:add_le(ioctl_returnCode, buffer(1,4))
+	local r = buffer(1,4):le_uint()
+	subtree:add_le(ioctl_returnCode, buffer(1,4)):append_text(get_return_code_description(r))
 	subtree:add_le(ioctl_id, buffer(5,4)):append_text(id_name)
 
 end
@@ -226,6 +267,12 @@ function ioctl_protocol_set_config_dissector(buffer, pinfo, tree)
 	do
 		subtree:add_le(ioctl_param, buffer(i,4))
 		subtree:add_le(ioctl_value, buffer(i+4,4))
+	end
+end
+
+function get_return_code_description(code)
+	local des = ""
+	if (code == 0) then return " (OK)"
 	end
 end
 
