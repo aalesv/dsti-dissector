@@ -40,7 +40,7 @@ local SW_CAN_HS = 0x8001
 densodsti_protocol = Proto("DensoDSTi", "Denso DST-i protocol")
 
 protocol_version =	ProtoField.uint16("DensoDSTi.version", "version", base.HEX)
-length =		ProtoField.uint8 ("DensoDSTi.length", "length", base.HEX)
+length =		ProtoField.uint8 ("DensoDSTi.length", "length", base.DEC_HEX)
 address =		ProtoField.uint16("DensoDSTi.address", "address", base.HEX)
 opCode =		ProtoField.uint8("DensoDSTi.opCode", "opCode", base.HEX)
 data =			ProtoField.bytes("DensoDSTi.data", "data", base.SPACE)
@@ -187,7 +187,7 @@ ioctl_unk = ProtoField.uint8("DensoDSTi.ioctl.unk", "unk", base.HEX)
 ioctl_returnCode = ProtoField.uint32("DensoDSTi.ioctl.returnCode", "returnCode", base.HEX)
 ioctl_channelID = ProtoField.uint32("DensoDSTi.ioctl.channelID", "channelID", base.HEX)
 ioctl_id = ProtoField.uint32("DensoDSTi.ioctl.id", "id", base.HEX)
-ioctl_length = ProtoField.uint32("DensoDSTi.ioctl.length", "length", base.HEX)
+ioctl_length = ProtoField.uint32("DensoDSTi.ioctl.length", "length", base.DEC_HEX)
 ioctl_param = ProtoField.uint32("DensoDSTi.ioctl.param", "param", base.HEX)
 ioctl_value = ProtoField.uint32("DensoDSTi.ioctl.value", "value", base.DEC)
 
@@ -327,7 +327,7 @@ end
 get_last_error_protocol = Proto("DensoDstiGET_LAST_ERROR", "Denso DST-i GET_LAST_ERROR")
 get_last_error_unk = ProtoField.uint8("DensoDSTi.get_last_error.unk", "unk", base.HEX)
 get_last_error_returnCode = ProtoField.uint32("DensoDSTi.get_last_error.returnCode", "returnCode", base.HEX)
-get_last_error_length = ProtoField.uint32("DensoDSTi.get_last_error.length", "length", base.HEX)
+get_last_error_length = ProtoField.uint32("DensoDSTi.get_last_error.length", "length", base.DEC_HEX)
 get_last_error_message = ProtoField.string("DensoDSTi.get_last_error.error_message", "error_message", base.NONE)
 
 get_last_error_protocol.fields = {get_last_error_unk, get_last_error_returnCode, get_last_error_length, get_last_error_message}
