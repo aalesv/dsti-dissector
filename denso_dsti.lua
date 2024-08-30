@@ -3,6 +3,7 @@ local ID_PASSTHRU = 0x0210
 local OPCODE_CONNECT	= 0x00
 local OPCODE_DISCONNECT	= 0x01
 local OPCODE_SET_FILTER	= 0x06
+local OPCODE_GET_LAST_ERROR	= 0x0A
 local OPCODE_IOCTL		= 0x0B
 
 --- J2534 protocols
@@ -38,14 +39,14 @@ local SW_CAN_HS = 0x8001
 
 densodsti_protocol = Proto("DensoDSTi", "Denso DST-i protocol")
 
-protocol_id =	ProtoField.uint16("DensoDSTi.id", "id", base.HEX)
+protocol_version =	ProtoField.uint16("DensoDSTi.version", "version", base.HEX)
 length =		ProtoField.uint8 ("DensoDSTi.length", "length", base.HEX)
 address =		ProtoField.uint16("DensoDSTi.address", "address", base.HEX)
 opCode =		ProtoField.uint8("DensoDSTi.opCode", "opCode", base.HEX)
 data =			ProtoField.bytes("DensoDSTi.data", "data", base.SPACE)
 checksum =		ProtoField.none("DensoDSTi.checksum", "checksum", base.HEX)
 
-densodsti_protocol.fields = {protocol_id, length, address, opCode, data, checksum}
+densodsti_protocol.fields = {protocol_version, length, address, opCode, data, checksum}
 
 function densodsti_protocol.dissector(buffer, pinfo, tree)
   local buffer_length = buffer:len()
@@ -57,10 +58,12 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   local addr = buffer(3,2):uint()
   local opcode = buffer(5,1):uint()
   local opcode_text = ""
-  if (opcode == OPCODE_CONNECT) then opcode_text = " (CONNECT)" end
-  if (opcode == OPCODE_DISCONNECT) then opcode_text = " (DISCONNECT)" end
-  if (opcode == OPCODE_SET_FILTER) then opcode_text = " (SET_FILTER)" end
-  if (opcode == OPCODE_IOCTL) then opcode_text = " (IOCTL)" end
+  if	 (opcode == OPCODE_CONNECT) then opcode_text = " (CONNECT)"
+  elseif (opcode == OPCODE_DISCONNECT) then opcode_text = " (DISCONNECT)"
+  elseif (opcode == OPCODE_SET_FILTER) then opcode_text = " (SET_FILTER)"
+  elseif (opcode == OPCODE_GET_LAST_ERROR) then opcode_text = " (GET_LAST_ERROR)"
+  elseif (opcode == OPCODE_IOCTL) then opcode_text = " (IOCTL)"
+  end
   
   local data_len = buffer(2,1):uint()
 
@@ -68,7 +71,7 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   local headerSubtree = subtree:add(densodsti_protocol, buffer(), "Header")
   local payloadSubtree = subtree:add(densodsti_protocol, buffer(), "Payload")
 
-  headerSubtree:add(protocol_id,buffer(0,2))
+  headerSubtree:add(protocol_version,buffer(0,2))
   headerSubtree:add(length,		buffer(2,1))
   headerSubtree:add(address,		buffer(3,2))
   headerSubtree:add(opCode,		buffer(5,1)):append_text(opcode_text)
@@ -87,6 +90,13 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   then
 	if     (addr == 0x007f)	then disconnect_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
 	elseif (addr == 0x00ff) then disconnect_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
+	else
+		payloadSubtree:add(data, dataBuf)
+	end
+  elseif (pid == ID_PASSTHRU and opcode == OPCODE_GET_LAST_ERROR)
+  then
+	if     (addr == 0x007f)	then get_last_error_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
+	elseif (addr == 0x00ff) then get_last_error_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
 	else
 		payloadSubtree:add(data, dataBuf)
 	end
@@ -121,21 +131,7 @@ function connect_protocol_dissector_req(buffer, pinfo, tree)
 	pinfo.cols.protocol = "DENSODSTI.CONNECT_REQ"
 	
 	local pid = buffer(0,4):le_uint()
-	local pid_name = tostring(pid)
-	
-	
-	if     (pid == J1850VPW) then		pid_name = " (J1850VPW)"
-	elseif (pid == J1850PWM) then		pid_name = " (J1850PWM)"
-	elseif (pid == ISO9141) then		pid_name = " (ISO9141)"
-	elseif (pid == ISO14230) then		pid_name = " (ISO14230)"
-	elseif (pid == CAN) then			pid_name = " (CAN)"
-	elseif (pid == ISO15765) then		pid_name = " (ISO15765)"
-	elseif (pid == SCI_A_ENGINE) then	pid_name = " (SCI_A_ENGINE)"
-	elseif (pid == SCI_A_TRANS) then	pid_name = " (SCI_A_TRANS)"
-	elseif (pid == SCI_B_ENGINE) then	pid_name = " (SCI_B_ENGINE)"
-	elseif (pid == SCI_B_TRANS) then	pid_name = " (SCI_B_TRANS)"
-	elseif (pid == SSM_ISO9141) then	pid_name = " (SSM_ISO9141)"
-	end
+	local pid_name = get_protocol_description(pid)
 	
 	local subtree = tree:add(data, buffer())
 	subtree:add_le(connect_protocolID, buffer(0,4)):append_text(pid_name)
@@ -191,11 +187,11 @@ ioctl_unk = ProtoField.uint8("DensoDSTi.ioctl.unk", "unk", base.HEX)
 ioctl_returnCode = ProtoField.uint32("DensoDSTi.ioctl.returnCode", "returnCode", base.HEX)
 ioctl_channelID = ProtoField.uint32("DensoDSTi.ioctl.channelID", "channelID", base.HEX)
 ioctl_id = ProtoField.uint32("DensoDSTi.ioctl.id", "id", base.HEX)
-ioctl_lenght = ProtoField.uint32("DensoDSTi.ioctl.length", "length", base.HEX)
+ioctl_length = ProtoField.uint32("DensoDSTi.ioctl.length", "length", base.HEX)
 ioctl_param = ProtoField.uint32("DensoDSTi.ioctl.param", "param", base.HEX)
 ioctl_value = ProtoField.uint32("DensoDSTi.ioctl.value", "value", base.DEC)
 
-ioctl_protocol.fields = {ioctl_unk, ioctl_returnCode, ioctl_channelID, ioctl_id, ioctl_lenght, ioctl_param, ioctl_value}
+ioctl_protocol.fields = {ioctl_unk, ioctl_returnCode, ioctl_channelID, ioctl_id, ioctl_length, ioctl_param, ioctl_value}
 
 function get_ioctl_id_name(id)
 	local id_name = ""
@@ -235,8 +231,10 @@ function ioctl_protocol_dissector_req(buffer, pinfo, tree)
 	subtree:add_le(ioctl_channelID, buffer(0,4))
 	subtree:add_le(ioctl_id, buffer(4,4)):append_text(id_name)
 	if (id == SET_CONFIG) then
-		subtree:add_le(ioctl_lenght, buffer(8,4))
+		subtree:add_le(ioctl_length, buffer(8,4))
 		ioctl_protocol_set_config_dissector(buffer(12, buffer_length-12):tvb(), pinfo, subtree)
+	elseif (id == FAST_INIT) then
+		fast_init_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfi, subtree)
 	end
 end
 
@@ -254,6 +252,9 @@ function ioctl_protocol_dissector_resp(buffer, pinfo, tree)
 	local r = buffer(1,4):le_uint()
 	subtree:add_le(ioctl_returnCode, buffer(1,4)):append_text(get_return_code_description(r))
 	subtree:add_le(ioctl_id, buffer(5,4)):append_text(id_name)
+	
+	--- Successful response contains payload
+	---if (r == 0 and id == GET_CONFIG) then 
 
 end
 
@@ -268,6 +269,105 @@ function ioctl_protocol_set_config_dissector(buffer, pinfo, tree)
 		subtree:add_le(ioctl_param, buffer(i,4))
 		subtree:add_le(ioctl_value, buffer(i+4,4))
 	end
+end
+
+--- FAST_INIT dissector
+
+fast_init_protocol = Proto("DensoDstiIOCTL_FAST_INIT", "Denso DST-i IOCTL FAST_INIT")
+fast_init_unk = ProtoField.uint8("DensoDSTi.fast_init.unk", "unk", base.HEX)
+fast_init_returnCode = ProtoField.uint32("DensoDSTi.fast_init.returnCode", "returnCode", base.HEX)
+fast_init_channelID = ProtoField.uint32("DensoDSTi.fast_init.channelID", "channelID", base.HEX)
+
+function fast_init_protocol_dissector(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+
+	--- Next is PASSTHRU_MSG
+	passthru_msg_protocol_dissector(buffer, pinfo, tree)
+end
+
+--- PASSTHRU_MSG dissector
+passthru_msg_protocol = Proto("DensoDstiPASSTHRU_MSG", "Denso DST-i PASSTHRU_MSG")
+passthru_msg_ProtocolID = ProtoField.uint32("DensoDSTi.passthru_msg.ProtocolID", "ProtocolID", base.HEX)
+passthru_msg_RxStatus = ProtoField.uint32("DensoDSTi.passthru_msg.RxStatus", "RxStatus", base.HEX)
+passthru_msg_TxFlags = ProtoField.uint32("DensoDSTi.passthru_msg.TxFlags", "TxFlags", base.HEX)
+passthru_msg_Timestamp = ProtoField.uint32("DensoDSTi.passthru_msg.Timestamp", "Timestamp", base.HEX)
+passthru_msg_DataSize = ProtoField.uint32("DensoDSTi.passthru_msg.DataSize", "DataSize", base.HEX)
+passthru_msg_ExtraDataIndex = ProtoField.uint32("DensoDSTi.passthru_msg.ExtraDataIndex", "ExtraDataIndex", base.HEX)
+passthru_msg_Data = ProtoField.bytes("DensoDSTi.passthru_msg.Data", "MSG", base.SPACE)
+
+passthru_msg_protocol.fields = {passthru_msg_ProtocolID,
+								passthru_msg_RxStatus,
+								passthru_msg_TxFlags,
+								passthru_msg_Timestamp,
+								passthru_msg_DataSize,
+								passthru_msg_ExtraDataIndex,
+								passthru_msg_Data}
+
+function passthru_msg_protocol_dissector(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length < 24 then return end
+
+	local pid = buffer(0,4):le_uint()
+	local pid_name = get_protocol_description(pid)
+	local data_size = buffer(16,4):le_uint()
+
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(passthru_msg_ProtocolID, buffer(0,4)):append_text(pid_name)
+	subtree:add_le(passthru_msg_RxStatus, buffer(4,4))
+	subtree:add_le(passthru_msg_TxFlags, buffer(8,4))
+	subtree:add_le(passthru_msg_Timestamp, buffer(12,4))
+	subtree:add_le(passthru_msg_DataSize, buffer(16,4))
+	subtree:add_le(passthru_msg_ExtraDataIndex, buffer(20,4))
+	subtree:add_le(passthru_msg_Data, buffer(24,data_size))
+
+end
+
+--- GET_LAST_ERROR dissector
+get_last_error_protocol = Proto("DensoDstiGET_LAST_ERROR", "Denso DST-i GET_LAST_ERROR")
+get_last_error_unk = ProtoField.uint8("DensoDSTi.get_last_error.unk", "unk", base.HEX)
+get_last_error_returnCode = ProtoField.uint32("DensoDSTi.get_last_error.returnCode", "returnCode", base.HEX)
+get_last_error_length = ProtoField.uint32("DensoDSTi.get_last_error.length", "length", base.HEX)
+get_last_error_message = ProtoField.string("DensoDSTi.get_last_error.error_message", "error_message", base.NONE)
+
+get_last_error_protocol.fields = {get_last_error_unk, get_last_error_returnCode, get_last_error_length, get_last_error_message}
+
+function get_last_error_protocol_dissector_req(buffer, pinfo, tree)
+		pinfo.cols.protocol = "DENSODSTI.GET_LAST_ERROR_REQ"
+end
+function get_last_error_protocol_dissector_resp(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length < 0 then return end
+	
+	pinfo.cols.protocol = "DENSODSTI.GET_LAST_ERROR_RESP"
+		
+	local msg_len = buffer(5, 4):le_uint()
+
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(get_last_error_unk, buffer(0,1))
+	subtree:add_le(get_last_error_returnCode, buffer(1,4))
+	subtree:add_le(get_last_error_length, buffer(5, 4))
+	subtree:add(get_last_error_message, buffer(9, msg_len))
+end
+
+--- Utility
+function get_protocol_description(pid)
+	local pid_name = tostring(pid)
+	
+	if     (pid == J1850VPW) then		pid_name = " (J1850VPW)"
+	elseif (pid == J1850PWM) then		pid_name = " (J1850PWM)"
+	elseif (pid == ISO9141) then		pid_name = " (ISO9141)"
+	elseif (pid == ISO14230) then		pid_name = " (ISO14230)"
+	elseif (pid == CAN) then			pid_name = " (CAN)"
+	elseif (pid == ISO15765) then		pid_name = " (ISO15765)"
+	elseif (pid == SCI_A_ENGINE) then	pid_name = " (SCI_A_ENGINE)"
+	elseif (pid == SCI_A_TRANS) then	pid_name = " (SCI_A_TRANS)"
+	elseif (pid == SCI_B_ENGINE) then	pid_name = " (SCI_B_ENGINE)"
+	elseif (pid == SCI_B_TRANS) then	pid_name = " (SCI_B_TRANS)"
+	elseif (pid == SSM_ISO9141) then	pid_name = " (SSM_ISO9141)"
+	end
+
+	return pid_name 
 end
 
 function get_return_code_description(code)
