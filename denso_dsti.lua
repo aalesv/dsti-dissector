@@ -467,6 +467,7 @@ set_filter_unk = ProtoField.uint8("DensoDSTi.set_filter.unk", "unk", base.HEX)
 set_filter_returnCode = ProtoField.uint32("DensoDSTi.set_filter.returnCode", "returnCode", base.HEX)
 set_filter_channelID = ProtoField.uint32("DensoDSTi.set_filter.channelID", "channelID", base.HEX)
 set_filter_filterType = ProtoField.uint32("DensoDSTi.set_filter.filterType", "filterType", base.HEX)
+set_filter_type = ProtoField.uint32("DensoDSTi.set_filter.type", "type", base.HEX)
 set_filter_filterID = ProtoField.uint32("DensoDSTi.set_filter.filterID", "filterID", base.HEX)
 set_filter_msgID = ProtoField.uint32("DensoDSTi.set_filter.msgID", "msgID", base.DEC_HEX)
 
@@ -474,6 +475,7 @@ set_filter_protocol.fields = {set_filter_unk,
 							  set_filter_returnCode,
 							  set_filter_channelID,
 							  set_filter_filterType,
+							  set_filter_type,
 							  set_filter_filterID,
 							  set_filter_msgID}
 
@@ -499,7 +501,8 @@ function set_filter_protocol_dissector_req(buffer, pinfo, tree)
 	local subtree = tree:add(data, buffer())
 	subtree:add_le(set_filter_channelID, buffer(0,4))
 	subtree:add_le(set_filter_filterType, buffer(4,4)):append_text(ftype_name)
-	subtree:add_le(set_filter_unk, buffer(8,1))
+	local ftype_int = buffer(8,1):le_uint()
+	subtree:add_le(set_filter_type, buffer(8,1)):append_text(get_internal_filter_type_description(ftype_int))
 	
 	local pos = 9
 	if (ftype == 1) then
@@ -535,7 +538,8 @@ function set_filter_protocol_dissector_resp(buffer, pinfo, tree)
 	subtree:add_le(set_filter_unk, buffer(0,1))
 	subtree:add_le(set_filter_returnCode, buffer(1,4))
 	subtree:add_le(set_filter_msgID, buffer(5,4))
-	subtree:add_le(set_filter_unk, buffer(9,1))
+	local ftype_int = buffer(9,1):le_uint()
+	subtree:add_le(set_filter_type, buffer(9,1)):append_text(get_internal_filter_type_description(ftype_int))
 	
 	local pos = 10
 	if (ftype == 3) then
@@ -590,6 +594,14 @@ function get_passthru_msg_length(buffer)
 	if buffer_length < 24 then return 0
 	else return buffer(16,4):le_uint()
 	end
+end
+
+function get_internal_filter_type_description(ftype)
+	local type_name = " "
+	if		(ftype == 3) then type_name = " (PASS_FILTER)"
+	elseif	(ftype == 7) then type_name = " (FLOW_CONTROL_FILTER)"
+	end
+	return type_name
 end
 
 DissectorTable.get("usb.bulk"):add(0xffff, densodsti_protocol)
