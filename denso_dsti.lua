@@ -4,7 +4,7 @@ local OPCODE_CONNECT		= 0x00
 local OPCODE_DISCONNECT		= 0x01
 local OPCODE_WRITE			= 0x03
 local OPCODE_SET_FILTER		= 0x06
-local OPCODE_GET_VERSION	= 0x09
+local OPCODE_READ_VERSION	= 0x09
 local OPCODE_GET_LAST_ERROR	= 0x0A
 local OPCODE_IOCTL			= 0x0B
 
@@ -64,7 +64,7 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   elseif (opcode == OPCODE_DISCONNECT) then opcode_text = " (DISCONNECT)"
   elseif (opcode == OPCODE_WRITE) then opcode_text = " (WRITE)"
   elseif (opcode == OPCODE_SET_FILTER) then opcode_text = " (SET_FILTER)"
-  elseif (opcode == OPCODE_GET_VERSION) then opcode_text = " (GET_VERSION)"
+  elseif (opcode == OPCODE_READ_VERSION) then opcode_text = " (READ_VERSION)"
   elseif (opcode == OPCODE_GET_LAST_ERROR) then opcode_text = " (GET_LAST_ERROR)"
   elseif (opcode == OPCODE_IOCTL) then opcode_text = " (IOCTL)"
   end
@@ -108,6 +108,13 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   then
 	if     (addr == 0x007f)	then get_last_error_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
 	elseif (addr == 0x00ff) then get_last_error_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
+	else
+		payloadSubtree:add(data, dataBuf)
+	end
+  elseif (pid == ID_PASSTHRU and opcode == OPCODE_READ_VERSION)
+  then
+	if     (addr == 0x007f)	then read_version_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
+	elseif (addr == 0x00ff) then read_version_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
 	else
 		payloadSubtree:add(data, dataBuf)
 	end
@@ -400,6 +407,45 @@ function write_protocol_dissector_resp(buffer, pinfo, tree)
 	subtree:add_le(write_returnCode, buffer(1,4)):append_text(get_return_code_description(r))
 	subtree:add_le(write_numMsg, buffer(5,4))
 
+end
+
+--- READ_VERSION dissector
+read_version_protocol = Proto("DensoDstiREAD_VERSION", "Denso DST-i READ_VERSION")
+read_version_unk = ProtoField.uint8("DensoDSTi.read_version.unk", "unk", base.HEX)
+read_version_returnCode = ProtoField.uint32("DensoDSTi.read_version.returnCode", "returnCode", base.HEX)
+read_version_length = ProtoField.uint32("DensoDSTi.read_version.length", "length", base.DEC_HEX)
+read_version_version_string = ProtoField.string("DensoDSTi.read_version.error_message", "version_string", base.NONE)
+
+read_version_protocol.fields = {read_version_unk, read_version_returnCode, read_version_length, read_version_version_string}
+
+function read_version_protocol_dissector_req(buffer, pinfo, tree)
+	pinfo.cols.protocol = "DENSODSTI.READ_VERSION_REQ"
+end
+
+function read_version_protocol_dissector_resp(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+	
+	pinfo.cols.protocol = "DENSODSTI.READ_VERSION_RESP"
+	
+	local subtree = tree:add(data, buffer())
+	
+	local r = buffer(1,4):le_uint()
+	
+	subtree:add_le(read_version_unk, buffer(0,1))
+	subtree:add_le(read_version_returnCode, buffer(1,4)):append_text(get_return_code_description(r))
+	
+	if (r == 0) then
+		local pos = 5
+		for i=0, 2, 1
+		do
+			local str_len = buffer(pos,4):le_uint()
+			subtree:add_le(read_version_length, buffer(pos,4))
+			subtree:add_le(read_version_version_string, buffer(pos+4, str_len))
+			pos = pos + 4 + str_len
+		end
+	end
+	
 end
 
 --- Utility
