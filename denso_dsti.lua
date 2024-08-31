@@ -1,10 +1,12 @@
 local ID_PASSTHRU = 0x0210
 
-local OPCODE_CONNECT	= 0x00
-local OPCODE_DISCONNECT	= 0x01
-local OPCODE_SET_FILTER	= 0x06
+local OPCODE_CONNECT		= 0x00
+local OPCODE_DISCONNECT		= 0x01
+local OPCODE_WRITE			= 0x03
+local OPCODE_SET_FILTER		= 0x06
+local OPCODE_GET_VERSION	= 0x09
 local OPCODE_GET_LAST_ERROR	= 0x0A
-local OPCODE_IOCTL		= 0x0B
+local OPCODE_IOCTL			= 0x0B
 
 --- J2534 protocols
 local J1850VPW =	0x01
@@ -60,7 +62,9 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   local opcode_text = ""
   if	 (opcode == OPCODE_CONNECT) then opcode_text = " (CONNECT)"
   elseif (opcode == OPCODE_DISCONNECT) then opcode_text = " (DISCONNECT)"
+  elseif (opcode == OPCODE_WRITE) then opcode_text = " (WRITE)"
   elseif (opcode == OPCODE_SET_FILTER) then opcode_text = " (SET_FILTER)"
+  elseif (opcode == OPCODE_GET_VERSION) then opcode_text = " (GET_VERSION)"
   elseif (opcode == OPCODE_GET_LAST_ERROR) then opcode_text = " (GET_LAST_ERROR)"
   elseif (opcode == OPCODE_IOCTL) then opcode_text = " (IOCTL)"
   end
@@ -90,6 +94,13 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   then
 	if     (addr == 0x007f)	then disconnect_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
 	elseif (addr == 0x00ff) then disconnect_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
+	else
+		payloadSubtree:add(data, dataBuf)
+	end
+  elseif (pid == ID_PASSTHRU and opcode == OPCODE_WRITE)
+  then
+	if     (addr == 0x007f)	then write_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
+	elseif (addr == 0x00ff) then write_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
 	else
 		payloadSubtree:add(data, dataBuf)
 	end
@@ -337,7 +348,7 @@ function get_last_error_protocol_dissector_req(buffer, pinfo, tree)
 end
 function get_last_error_protocol_dissector_resp(buffer, pinfo, tree)
 	local buffer_length = buffer:len()
-	if buffer_length < 0 then return end
+	if buffer_length == 0 then return end
 	
 	pinfo.cols.protocol = "DENSODSTI.GET_LAST_ERROR_RESP"
 		
@@ -348,6 +359,47 @@ function get_last_error_protocol_dissector_resp(buffer, pinfo, tree)
 	subtree:add_le(get_last_error_returnCode, buffer(1,4))
 	subtree:add_le(get_last_error_length, buffer(5, 4))
 	subtree:add(get_last_error_message, buffer(9, msg_len))
+end
+
+--- WRITE dissector
+write_protocol = Proto("DensoDstiWRITE", "Denso DST-i WRITE")
+write_unk = ProtoField.uint8("DensoDSTi.write.unk", "unk", base.HEX)
+write_returnCode = ProtoField.uint32("DensoDSTi.write.returnCode", "returnCode", base.HEX)
+write_channelID = ProtoField.uint32("DensoDSTi.write.channelID", "channelID", base.HEX)
+write_numMsg = ProtoField.uint32("DensoDSTi.write.numMsg", "numMsg", base.DEC_HEX)
+write_timeout = ProtoField.uint32("DensoDSTi.write.timeout", "timeout", base.DEC_HEX)
+
+write_protocol.fields = {write_unk, write_returnCode, write_channelID, write_numMsg, write_timeout}
+
+function write_protocol_dissector_req(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length < 36 then return end
+
+	pinfo.cols.protocol = "DENSODSTI.WRITE_REQ"
+	
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(write_channelID, buffer(0,4))
+	subtree:add_le(write_numMsg, buffer(4,4))
+	subtree:add_le(write_timeout, buffer(8,4))
+	
+	--- Next is PASSTHRU_MSG
+	passthru_msg_protocol_dissector(buffer(12, buffer_length-12), pinfo, subtree)
+
+end
+
+function write_protocol_dissector_resp(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+	
+	local r = buffer(1,4):le_uint()
+
+	pinfo.cols.protocol = "DENSODSTI.WRITE_RESP"
+	
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(write_unk, buffer(0,1))
+	subtree:add_le(write_returnCode, buffer(1,4)):append_text(get_return_code_description(r))
+	subtree:add_le(write_numMsg, buffer(5,4))
+
 end
 
 --- Utility
