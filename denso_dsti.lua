@@ -38,6 +38,8 @@ local DELETE_FROM_FUNCT_MSG_LOOKUP_TABLE =	0x0D
 local READ_PROG_VOLTAGE =					0x0E
 local SW_CAN_NS = 0x8000
 local SW_CAN_HS = 0x8001
+--- Proprietary Subaru IDs
+local SSM_SET_CONFIG =						0x10002
 
 densodsti_protocol = Proto("DensoDSTi", "Denso DST-i protocol")
 
@@ -72,8 +74,8 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   local data_len = buffer(2,1):uint()
 
   local subtree = tree:add(densodsti_protocol, buffer(), "Denso DST-i Data")
-  local headerSubtree = subtree:add(densodsti_protocol, buffer(), "Header")
-  local payloadSubtree = subtree:add(densodsti_protocol, buffer(), "Payload")
+  local headerSubtree = subtree:add(densodsti_protocol, buffer(0, 6), "Header")
+  local payloadSubtree = subtree:add(densodsti_protocol, buffer(6, data_len), "Payload")
 
   headerSubtree:add(protocol_version,buffer(0,2))
   headerSubtree:add(length,		buffer(2,1))
@@ -101,6 +103,13 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   then
 	if     (addr == 0x007f)	then write_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
 	elseif (addr == 0x00ff) then write_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
+	else
+		payloadSubtree:add(data, dataBuf)
+	end
+  elseif (pid == ID_PASSTHRU and opcode == OPCODE_SET_FILTER)
+  then
+	if     (addr == 0x007f)	then set_filter_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
+	elseif (addr == 0x00ff) then set_filter_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
 	else
 		payloadSubtree:add(data, dataBuf)
 	end
@@ -207,7 +216,7 @@ ioctl_channelID = ProtoField.uint32("DensoDSTi.ioctl.channelID", "channelID", ba
 ioctl_id = ProtoField.uint32("DensoDSTi.ioctl.id", "id", base.HEX)
 ioctl_length = ProtoField.uint32("DensoDSTi.ioctl.length", "length", base.DEC_HEX)
 ioctl_param = ProtoField.uint32("DensoDSTi.ioctl.param", "param", base.HEX)
-ioctl_value = ProtoField.uint32("DensoDSTi.ioctl.value", "value", base.DEC)
+ioctl_value = ProtoField.uint32("DensoDSTi.ioctl.value", "value", base.DEC_HEX)
 
 ioctl_protocol.fields = {ioctl_unk, ioctl_returnCode, ioctl_channelID, ioctl_id, ioctl_length, ioctl_param, ioctl_value}
 
@@ -229,6 +238,7 @@ function get_ioctl_id_name(id)
 	elseif	(id == READ_PROG_VOLTAGE) then id_name = " (READ_PROG_VOLTAGE)"
 	elseif	(id == SW_CAN_NS) then id_name = " (SW_CAN_NS)"
 	elseif	(id == SW_CAN_HS) then id_name = " (SW_CAN_HS)"
+	elseif	(id == SSM_SET_CONFIG) then id_name = " (SSM_SET_CONFIG)"
 	end
 	
 	return id_name
@@ -251,6 +261,9 @@ function ioctl_protocol_dissector_req(buffer, pinfo, tree)
 	if (id == SET_CONFIG) then
 		subtree:add_le(ioctl_length, buffer(8,4))
 		ioctl_protocol_set_config_dissector(buffer(12, buffer_length-12):tvb(), pinfo, subtree)
+	elseif (id == SSM_SET_CONFIG) then
+		--- SBYTE_ARRAY dissector needed
+		ioctl_protocol_set_config_dissector(buffer(8, buffer_length-8):tvb(), pinfo, subtree)
 	elseif (id == FAST_INIT) then
 		fast_init_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfi, subtree)
 	end
@@ -310,7 +323,7 @@ passthru_msg_ProtocolID = ProtoField.uint32("DensoDSTi.passthru_msg.ProtocolID",
 passthru_msg_RxStatus = ProtoField.uint32("DensoDSTi.passthru_msg.RxStatus", "RxStatus", base.HEX)
 passthru_msg_TxFlags = ProtoField.uint32("DensoDSTi.passthru_msg.TxFlags", "TxFlags", base.HEX)
 passthru_msg_Timestamp = ProtoField.uint32("DensoDSTi.passthru_msg.Timestamp", "Timestamp", base.HEX)
-passthru_msg_DataSize = ProtoField.uint32("DensoDSTi.passthru_msg.DataSize", "DataSize", base.HEX)
+passthru_msg_DataSize = ProtoField.uint32("DensoDSTi.passthru_msg.DataSize", "DataSize", base.DEC_HEX)
 passthru_msg_ExtraDataIndex = ProtoField.uint32("DensoDSTi.passthru_msg.ExtraDataIndex", "ExtraDataIndex", base.HEX)
 passthru_msg_Data = ProtoField.bytes("DensoDSTi.passthru_msg.Data", "MSG", base.SPACE)
 
@@ -330,7 +343,7 @@ function passthru_msg_protocol_dissector(buffer, pinfo, tree)
 	local pid_name = get_protocol_description(pid)
 	local data_size = buffer(16,4):le_uint()
 
-	local subtree = tree:add(data, buffer())
+	local subtree = tree ---:add(data, buffer())
 	subtree:add_le(passthru_msg_ProtocolID, buffer(0,4)):append_text(pid_name)
 	subtree:add_le(passthru_msg_RxStatus, buffer(4,4))
 	subtree:add_le(passthru_msg_TxFlags, buffer(8,4))
@@ -448,9 +461,107 @@ function read_version_protocol_dissector_resp(buffer, pinfo, tree)
 	
 end
 
+--- SET_FILTER dissector
+set_filter_protocol = Proto("DensoDstiSET_FILTER", "Denso DST-i SET_FILTER")
+set_filter_unk = ProtoField.uint8("DensoDSTi.set_filter.unk", "unk", base.HEX)
+set_filter_returnCode = ProtoField.uint32("DensoDSTi.set_filter.returnCode", "returnCode", base.HEX)
+set_filter_channelID = ProtoField.uint32("DensoDSTi.set_filter.channelID", "channelID", base.HEX)
+set_filter_filterType = ProtoField.uint32("DensoDSTi.set_filter.filterType", "filterType", base.HEX)
+set_filter_filterID = ProtoField.uint32("DensoDSTi.set_filter.filterID", "filterID", base.HEX)
+set_filter_msgID = ProtoField.uint32("DensoDSTi.set_filter.msgID", "msgID", base.DEC_HEX)
+
+set_filter_protocol.fields = {set_filter_unk,
+							  set_filter_returnCode,
+							  set_filter_channelID,
+							  set_filter_filterType,
+							  set_filter_filterID,
+							  set_filter_msgID}
+
+function add_passthru_message(protocol, buffer, tree, name)
+	local msg_len = get_passthru_msg_length(buffer(0,24))
+	local msg = tree:add(protocol, buffer(0, 24+msg_len), name)
+	passthru_msg_protocol_dissector(buffer(0, 24+msg_len), nil, msg)
+end
+
+function set_filter_protocol_dissector_req(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+
+	pinfo.cols.protocol = "DENSODSTI.SET_FILTER_REQ"
+	
+	local ftype = buffer(4,4):le_uint()
+	local ftype_name
+	if 		(ftype == 1) then ftype_name = " (PASS_FILTER)"
+	elseif	(ftype == 2) then ftype_name = " (BLOCK_FILTER)"
+	elseif	(ftype == 3) then ftype_name = " (FLOW_CONTROL_FILTER)"
+	end
+	
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(set_filter_channelID, buffer(0,4))
+	subtree:add_le(set_filter_filterType, buffer(4,4)):append_text(ftype_name)
+	subtree:add_le(set_filter_unk, buffer(8,1))
+	
+	local pos = 9
+	if (ftype == 1) then
+		local maskMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "Mask")	
+		
+		pos = pos + 24 + maskMsg_len
+		local patternMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "FlowControl")
+	elseif (ftype == 3) then
+		local maskMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "Mask")	
+		
+		pos = pos + 24 + maskMsg_len
+		local patternMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "Pattern")	
+		
+		pos = pos + 24 + patternMsg_len
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "FlowControl")
+	end
+end
+
+
+function set_filter_protocol_dissector_resp(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+
+	pinfo.cols.protocol = "DENSODSTI.SET_FILTER_RESP"
+
+	local ftype = buffer(9,1):le_uint()
+
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(set_filter_unk, buffer(0,1))
+	subtree:add_le(set_filter_returnCode, buffer(1,4))
+	subtree:add_le(set_filter_msgID, buffer(5,4))
+	subtree:add_le(set_filter_unk, buffer(9,1))
+	
+	local pos = 10
+	if (ftype == 3) then
+		local maskMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "Mask")	
+		
+		pos = pos + 24 + maskMsg_len
+		local patternMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "FlowControl")
+	elseif (ftype == 7) then
+		local maskMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "Mask")	
+		
+		pos = pos + 24 + maskMsg_len
+		local patternMsg_len = get_passthru_msg_length(buffer(pos,24))
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "Pattern")	
+		
+		pos = pos + 24 + patternMsg_len
+		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "FlowControl")
+	end
+
+end
+
 --- Utility
 function get_protocol_description(pid)
-	local pid_name = tostring(pid)
+	local pid_name = " "
 	
 	if     (pid == J1850VPW) then		pid_name = " (J1850VPW)"
 	elseif (pid == J1850PWM) then		pid_name = " (J1850PWM)"
@@ -472,6 +583,13 @@ function get_return_code_description(code)
 	local des = ""
 	if (code == 0) then des = " (OK)" end
 	return des
+end
+
+function get_passthru_msg_length(buffer)
+	local buffer_length = buffer:len()
+	if buffer_length < 24 then return 0
+	else return buffer(16,4):le_uint()
+	end
 end
 
 DissectorTable.get("usb.bulk"):add(0xffff, densodsti_protocol)
