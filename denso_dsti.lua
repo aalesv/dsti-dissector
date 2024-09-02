@@ -2,6 +2,7 @@ local ID_PASSTHRU = 0x0210
 
 local OPCODE_CONNECT		= 0x00
 local OPCODE_DISCONNECT		= 0x01
+local OPCODE_READ			= 0x02
 local OPCODE_WRITE			= 0x03
 local OPCODE_SET_FILTER		= 0x06
 local OPCODE_READ_VERSION	= 0x09
@@ -97,6 +98,13 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   then
 	if     (addr == 0x007f)	then disconnect_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
 	elseif (addr == 0x00ff) then disconnect_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
+	else
+		payloadSubtree:add(data, dataBuf)
+	end
+  elseif (pid == ID_PASSTHRU and opcode == OPCODE_READ)
+  then
+	if     (addr == 0x007f)	then read_protocol_dissector_req (dataBuf:tvb(), pinfo, payloadSubtree)
+	elseif (addr == 0x00ff) then read_protocol_dissector_resp(dataBuf:tvb(), pinfo, payloadSubtree)
 	else
 		payloadSubtree:add(data, dataBuf)
 	end
@@ -384,7 +392,9 @@ function passthru_msg_protocol_dissector(buffer, pinfo, tree)
 	subtree:add_le(passthru_msg_Timestamp, buffer(12,4))
 	subtree:add_le(passthru_msg_DataSize, buffer(16,4))
 	subtree:add_le(passthru_msg_ExtraDataIndex, buffer(20,4))
-	subtree:add_le(passthru_msg_Data, buffer(24,data_size))
+	if (data_size > 0) then
+		subtree:add_le(passthru_msg_Data, buffer(24,data_size))
+	end
 
 end
 
@@ -594,6 +604,43 @@ function set_filter_protocol_dissector_resp(buffer, pinfo, tree)
 		pos = pos + 24 + patternMsg_len
 		add_passthru_message(set_filter_protocol, buffer(pos, buffer_length-pos), subtree, "FlowControl")
 	end
+
+end
+
+--- READ dissector
+read_protocol = Proto("DensoDstiREAD", "Denso DST-i READ")
+read_unk = ProtoField.uint8("DensoDSTi.read.unk", "unk", base.HEX)
+read_returnCode = ProtoField.uint32("DensoDSTi.read.returnCode", "returnCode", base.HEX)
+read_channelID = ProtoField.uint32("DensoDSTi.read.channelID", "channelID", base.HEX)
+read_numRxMsg = ProtoField.uint32("DensoDSTi.read.numRxMsg", "numRxMsg", base.DEC_HEX)
+read_timeout = ProtoField.uint32("DensoDSTi.read.timeout", "timeout", base.DEC_HEX)
+
+read_protocol.fields = {read_unk, read_returnCode, read_channelID, read_numRxMsg, read_timeout}
+
+function read_protocol_dissector_req(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+
+	pinfo.cols.protocol = "DENSODSTI.READ_REQ"
+	
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(read_channelID, buffer(0,4))
+	subtree:add_le(read_numRxMsg, buffer(4,4))
+	subtree:add_le(read_timeout, buffer(8,4))
+end
+
+function read_protocol_dissector_resp(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length == 0 then return end
+
+	pinfo.cols.protocol = "DENSODSTI.READ_RESP"
+	
+	local subtree = tree:add(data, buffer())
+	subtree:add_le(read_unk, buffer(0,1))
+	subtree:add_le(read_returnCode, buffer(1,4))
+	subtree:add_le(read_numRxMsg, buffer(5,4))
+	--- Next is PASSTHRU_MSG
+	passthru_msg_protocol_dissector(buffer(9, buffer_length-9), pinfo, subtree)
 
 end
 
