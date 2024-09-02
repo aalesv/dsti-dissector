@@ -21,6 +21,7 @@ local SCI_B_ENGINE =0x09
 local SCI_B_TRANS =	0x0A
 --- Proprietary Subaru protocols
 local SSM_ISO9141 =	0x20001
+local SSM_ISO15765 =0x20004
 
 --- IOCTL IDs
 local GET_CONFIG =							0x01
@@ -262,10 +263,9 @@ function ioctl_protocol_dissector_req(buffer, pinfo, tree)
 		subtree:add_le(ioctl_length, buffer(8,4))
 		ioctl_protocol_set_config_dissector(buffer(12, buffer_length-12):tvb(), pinfo, subtree)
 	elseif (id == SSM_SET_CONFIG) then
-		--- SBYTE_ARRAY dissector needed
-		ioctl_protocol_set_config_dissector(buffer(8, buffer_length-8):tvb(), pinfo, subtree)
+		sbyte_array_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfo, subtree)
 	elseif (id == FAST_INIT) then
-		fast_init_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfi, subtree)
+		fast_init_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfo, subtree)
 	end
 end
 
@@ -285,7 +285,11 @@ function ioctl_protocol_dissector_resp(buffer, pinfo, tree)
 	subtree:add_le(ioctl_id, buffer(5,4)):append_text(id_name)
 	
 	--- Successful response contains payload
-	---if (r == 0 and id == GET_CONFIG) then 
+	---if (r == 0 and id == GET_CONFIG) then
+
+	if (r == 0 and id == READ_VBATT) then
+		vbatt_protocol_dissector(buffer(9, 4), pinfo, subtree)
+	end
 
 end
 
@@ -315,6 +319,36 @@ function fast_init_protocol_dissector(buffer, pinfo, tree)
 
 	--- Next is PASSTHRU_MSG
 	passthru_msg_protocol_dissector(buffer, pinfo, tree)
+end
+
+--- SBYTE_ARRAY dissector
+sbyte_array_protocol = Proto("DensoDstiSBYTE_ARRAY", "Denso DST-i SBYTE_ARRAY")
+sbyte_array_numOfBytes = ProtoField.uint32("DensoDSTi.sbyte_array.numOfBytes", "NumOfBytes", base.DEC_HEX)
+
+sbyte_array_protocol.fields = {sbyte_array_numOfBytes}
+
+function sbyte_array_protocol_dissector(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length < 5 then return end
+
+	local subtree = tree
+	subtree:add_le(sbyte_array_numOfBytes, buffer(0,4))
+	subtree:add(data, buffer(4, buffer_length-4))
+end
+
+--- VBATT dissector
+vbatt_protocol = Proto("DensoDstiVBATT", "Denso DST-i VBATT")
+vbatt_value = ProtoField.uint32("DensoDSTi.vbatt.value", "value", base.DEC_HEX)
+
+vbatt_protocol.fields = {vbatt_value}
+
+function vbatt_protocol_dissector(buffer, pinfo, tree)
+	local buffer_length = buffer:len()
+	if buffer_length < 4 then return end
+
+	local subtree = tree
+	subtree:add_le(vbatt_value, buffer(0,4))
+	
 end
 
 --- PASSTHRU_MSG dissector
@@ -536,7 +570,7 @@ function set_filter_protocol_dissector_resp(buffer, pinfo, tree)
 
 	local subtree = tree:add(data, buffer())
 	subtree:add_le(set_filter_unk, buffer(0,1))
-	subtree:add_le(set_filter_returnCode, buffer(1,4))
+	subtree:add_le(set_filter_returnCode, buffer(1,4)):append_text(get_return_code_description(buffer(1,4):le_uint()))
 	subtree:add_le(set_filter_msgID, buffer(5,4))
 	local ftype_int = buffer(9,1):le_uint()
 	subtree:add_le(set_filter_type, buffer(9,1)):append_text(get_internal_filter_type_description(ftype_int))
@@ -578,6 +612,7 @@ function get_protocol_description(pid)
 	elseif (pid == SCI_B_ENGINE) then	pid_name = " (SCI_B_ENGINE)"
 	elseif (pid == SCI_B_TRANS) then	pid_name = " (SCI_B_TRANS)"
 	elseif (pid == SSM_ISO9141) then	pid_name = " (SSM_ISO9141)"
+	elseif (pid == SSM_ISO15765) then	pid_name = " (SSM_ISO15765)"
 	end
 
 	return pid_name 
