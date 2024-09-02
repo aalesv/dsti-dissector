@@ -1,0 +1,242 @@
+<ApiMonitor>
+	<Include Filename="Headers\common.h.xml" />
+	<Headers>
+		<Variable Name="BYTE [4128]" Type="Array" Base="BYTE" Count="4128" />
+		<Variable Name="ULONG [100]" Type="Array" Base="ULONG" Count="100" />
+		<Variable Name="P_ULONG_100" Type="POINTER" Base="ULONG [100]" />
+		<Variable Name="LPULONG" Type="Pointer"  Base="ULONG" />
+		
+		<Variable Name="CHAN_ID" Type="Alias" Base="ULONG" />
+		<Variable Name="DEV_ID" Type="Alias" Base="ULONG" />
+		<Variable Name="P_DEV_ID" Type="POINTER" Base="DEV_ID" />
+		
+		<Variable Name="PASS_THRU_MESSAGE_STRUCT" Type="Struct">
+			<Field Type="ULONG"			name="ProtocolID" />
+			<Field Type="ULONG"			name="RxStatus" />
+			<Field Type="ULONG"			name="TxFlags" />
+			<Field Type="ULONG"			name="Timestamp" />
+			<Field Type="ULONG"			name="DataSize" />
+			<Field Type="ULONG"			name="ExtraDataIndex" />
+			<Field Type="BYTE [1]"		name="Data" count="DataSize"/>
+		</Variable>
+
+		<Variable Name="[IOCTL_ID]" Type="Alias" Base="ULONG">
+			<Display Name="ULONG" />
+			<Enum>
+				<Set Name="GET_CONFIG"							Value="0x1" />
+				<Set Name="SET_CONFIG"							Value="0x2" />
+				<Set Name="READ_VBATT"							Value="0x3" />
+				<Set Name="FIVE_BAUD_INIT"						Value="0x4" />
+				<Set Name="FAST_INIT"							Value="0x5" />
+				<Set Name="CLEAR_TX_BUFFER"						Value="0x7" />
+				<Set Name="CLEAR_RX_BUFFER"						Value="0x8" />
+				<Set Name="CLEAR_PERIODIC_MSGS"					Value="0x9" />
+				<Set Name="CLEAR_MSG_FILTERS"					Value="0xA" />
+				<Set Name="CLEAR_FUNCT_MSG_LOOKUP_TABLE"		Value="0xB" />
+				<Set Name="ADD_TO_FUNCT_MSG_LOOKUP_TABLE"		Value="0xC" />
+				<Set Name="DELETE_FROM_FUNCT_MSG_LOOKUP_TABLE"	Value="0xD" />
+				<Set Name="READ_PROG_VOLTAGE"					Value="0xE" />
+				<Set Name="DST-i_SET_CONFIG_SBYTE_ARRAY"		Value="0x10002" />
+			</Enum>
+		</Variable>
+		
+		<Variable Name="[FILTER_ID]" Type="Alias" Base="ULONG">
+			<Display Name="ULONG" />
+			<Enum>
+				<Set Name="PASS_FILTER"			Value="0x1" />
+				<Set Name="BLOCK_FILTER"		Value="0x2" />
+				<Set Name="FLOW_CONTROL_FILTER"	Value="0x3" />
+			</Enum>
+		</Variable>
+		
+		<Variable Name="SCONFIG" Type="Struct">
+			<Field Type="ULONG"			name="Parameter" />
+			<Field Type="ULONG"			name="Value" />
+		</Variable>
+		
+		
+		<Variable Name="SCONFIG_LIST" Type="Struct">
+			<Field Type="ULONG"			name="NumOfParams" />
+			<Field Type="LPULONG"		name="*ConfigPtr" count="NumOfParams"/>
+		</Variable>
+		<Variable Name="P_SCONFIG_LIST" Type="POINTER" Base="SCONFIG_LIST" />
+		
+		<Variable Name="PASS_THRU_MESSAGE" Type="POINTER" Base="PASS_THRU_MESSAGE_STRUCT" />
+		<Variable Name="NUM_MSG" Type="POINTER" Base="ULONG" />
+		<Variable Name="TIMEOUT" Type="Alias" Base="ULONG" />
+	</Headers>
+
+	<Module Name="DSTiDV32.dll" CallingConvention="STDCALL">		
+		<Category Name="Passthru API 0404" />
+		
+		<Api Name="PassThruOpen">
+			<Param Type="PINT" Name="*pName" />
+			<Param Type="P_DEV_ID" Name="*pDeviceID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruClose">
+			<Param Type="DEV_ID" Name="DeviceID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruConnect">
+			<Param Type="DEV_ID" Name="DeviceID" />
+			<Param Type="ULONG" Name="ProtocolID" />
+			<Param Type="ULONG" Name="Flags" />
+			<Param Type="ULONG" Name="BaudRate" />
+			<Param Type="PULONG" Name="*pCahnnelID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruDisconnect">
+			<Param Type="ULONG" Name="CahnnelID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruIoctl">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="[IOCTL_ID]" Name="IoctlID" />
+			<Param Type="P_SCONFIG_LIST" Name="*pInput" />
+			<Param Type="P_SCONFIG_LIST" Name="*pOutput" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruReadMsgs">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*rxMsg" />
+			<Param Type="NUM_MSG" Name="*numRxMsg" />
+			<Param Type="TIMEOUT" Name="Timeout" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruWriteMsgs">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="PASS_THRU_MESSAGE" Name="rxMsg" />
+			<Param Type="NUM_MSG" Name="numRxMsg" />
+			<Param Type="TIMEOUT" Name="Timeout" />
+			<Return Type="LONG" />
+		</Api>
+		
+		<Api Name="PassThruStartMsgFilter">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="[FILTER_ID]" Name="FilterType	" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pMaskMsg" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pPatternMsg" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pFlowControlMsg" />
+			<Param Type="PULONG" Name="*pMsgID" />
+			<Return Type="LONG" />
+		</Api>
+		
+	</Module>
+	
+	<Module Name="j2534.dll" CallingConvention="STDCALL">		
+		<Category Name="Passthru API 0404" />
+		
+		<Api Name="PassThruOpen">
+			<Param Type="PINT" Name="*pName" />
+			<Param Type="P_DEV_ID" Name="*pDeviceID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruClose">
+			<Param Type="DEV_ID" Name="DeviceID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruConnect">
+			<Param Type="DEV_ID" Name="DeviceID" />
+			<Param Type="ULONG" Name="ProtocolID" />
+			<Param Type="ULONG" Name="Flags" />
+			<Param Type="ULONG" Name="BaudRate" />
+			<Param Type="PULONG" Name="*pCahnnelID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruDisconnect">
+			<Param Type="ULONG" Name="CahnnelID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruIoctl">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="[IOCTL_ID]" Name="IoctlID" />
+			<Param Type="P_SCONFIG_LIST" Name="*pInput" />
+			<Param Type="P_SCONFIG_LIST" Name="*pOutput" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruReadMsgs">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*rxMsg" />
+			<Param Type="NUM_MSG" Name="*numRxMsg" />
+			<Param Type="TIMEOUT" Name="Timeout" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruWriteMsgs">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="PASS_THRU_MESSAGE" Name="rxMsg" />
+			<Param Type="NUM_MSG" Name="numRxMsg" />
+			<Param Type="TIMEOUT" Name="Timeout" />
+			<Return Type="LONG" />
+		</Api>
+		
+	</Module>
+	
+	<Module Name="op20pt32.dll" CallingConvention="STDCALL">		
+		<Category Name="Passthru API 0404" />
+		
+		<Api Name="PassThruOpen">
+			<Param Type="PINT" Name="*pName" />
+			<Param Type="P_DEV_ID" Name="*pDeviceID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruClose">
+			<Param Type="DEV_ID" Name="DeviceID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruConnect">
+			<Param Type="DEV_ID" Name="DeviceID" />
+			<Param Type="ULONG" Name="ProtocolID" />
+			<Param Type="ULONG" Name="Flags" />
+			<Param Type="ULONG" Name="BaudRate" />
+			<Param Type="PULONG" Name="*pCahnnelID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruDisconnect">
+			<Param Type="ULONG" Name="CahnnelID" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruIoctl">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="[IOCTL_ID]" Name="IoctlID" />
+			<Param Type="P_SCONFIG_LIST" Name="*pInput" />
+			<Param Type="P_SCONFIG_LIST" Name="*pOutput" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruReadMsgs">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*rxMsg" />
+			<Param Type="NUM_MSG" Name="*numRxMsg" />
+			<Param Type="TIMEOUT" Name="Timeout" />
+			<Return Type="LONG" />
+		</Api>
+
+		<Api Name="PassThruWriteMsgs">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="PASS_THRU_MESSAGE" Name="rxMsg" />
+			<Param Type="NUM_MSG" Name="numRxMsg" />
+			<Param Type="TIMEOUT" Name="Timeout" />
+			<Return Type="LONG" />
+		</Api>
+		
+	</Module>
+</ApiMonitor>
+
+			
