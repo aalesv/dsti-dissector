@@ -66,6 +66,7 @@ function densodsti_protocol.dissector(buffer, pinfo, tree)
   local opcode_text = ""
   if	 (opcode == OPCODE_CONNECT) then opcode_text = " (CONNECT)"
   elseif (opcode == OPCODE_DISCONNECT) then opcode_text = " (DISCONNECT)"
+  elseif (opcode == OPCODE_READ) then opcode_text = " (READ)"
   elseif (opcode == OPCODE_WRITE) then opcode_text = " (WRITE)"
   elseif (opcode == OPCODE_SET_FILTER) then opcode_text = " (SET_FILTER)"
   elseif (opcode == OPCODE_READ_VERSION) then opcode_text = " (READ_VERSION)"
