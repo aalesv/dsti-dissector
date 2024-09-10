@@ -53,11 +53,11 @@
 			<Field Type="ULONG"			name="Parameter" />
 			<Field Type="ULONG"			name="Value" />
 		</Variable>
-		
-		
+		<Variable Name="P_SCONFIG" Type="Pointer"  Base="SCONFIG" />
+
 		<Variable Name="SCONFIG_LIST" Type="Struct">
 			<Field Type="ULONG"			name="NumOfParams" />
-			<Field Type="LPULONG"		name="*ConfigPtr" count="NumOfParams"/>
+			<Field Type="P_SCONFIG"		name="*ConfigPtr" count="NumOfParams"/>
 		</Variable>
 		<Variable Name="P_SCONFIG_LIST" Type="POINTER" Base="SCONFIG_LIST" />
 		
