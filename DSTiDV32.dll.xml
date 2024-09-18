@@ -182,6 +182,16 @@
 			<Return Type="LONG" />
 		</Api>
 		
+		<Api Name="PassThruStartMsgFilter">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="[FILTER_ID]" Name="FilterType	" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pMaskMsg" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pPatternMsg" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pFlowControlMsg" />
+			<Param Type="PULONG" Name="*pMsgID" />
+			<Return Type="LONG" />
+		</Api>
+		
 	</Module>
 	
 	<Module Name="op20pt32.dll" CallingConvention="STDCALL">		
@@ -233,6 +243,16 @@
 			<Param Type="PASS_THRU_MESSAGE" Name="rxMsg" />
 			<Param Type="NUM_MSG" Name="numRxMsg" />
 			<Param Type="TIMEOUT" Name="Timeout" />
+			<Return Type="LONG" />
+		</Api>
+		
+		<Api Name="PassThruStartMsgFilter">
+			<Param Type="CHAN_ID" Name="chanID" />
+			<Param Type="[FILTER_ID]" Name="FilterType	" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pMaskMsg" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pPatternMsg" />
+			<Param Type="PASS_THRU_MESSAGE" Name="*pFlowControlMsg" />
+			<Param Type="PULONG" Name="*pMsgID" />
 			<Return Type="LONG" />
 		</Api>
 		
