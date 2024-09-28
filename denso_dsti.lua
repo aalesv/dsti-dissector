@@ -42,6 +42,7 @@ local SW_CAN_NS = 0x8000
 local SW_CAN_HS = 0x8001
 --- Proprietary Subaru IDs
 local SSM_SET_CONFIG =						0x10002
+local SSM_IOCTL_MSG = 						0x10003
 
 densodsti_protocol = Proto("DensoDSTi", "Denso DST-i protocol")
 
@@ -249,6 +250,7 @@ function get_ioctl_id_name(id)
 	elseif	(id == SW_CAN_NS) then id_name = " (SW_CAN_NS)"
 	elseif	(id == SW_CAN_HS) then id_name = " (SW_CAN_HS)"
 	elseif	(id == SSM_SET_CONFIG) then id_name = " (SSM_SET_CONFIG)"
+	elseif	(id == SSM_IOCTL_MSG) then id_name = " (SSM_IOCTL_MSG)"
 	end
 	
 	return id_name
@@ -275,6 +277,8 @@ function ioctl_protocol_dissector_req(buffer, pinfo, tree)
 		sbyte_array_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfo, subtree)
 	elseif (id == FAST_INIT) then
 		fast_init_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfo, subtree)
+	elseif (id == SSM_IOCTL_MSG) then
+		passthru_msg_protocol_dissector(buffer(8, buffer_length-8):tvb(), pinfo, subtree)
 	end
 end
 
